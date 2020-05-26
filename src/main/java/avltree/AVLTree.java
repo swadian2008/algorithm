@@ -218,20 +218,6 @@ public class AVLTree<K extends Comparable<K>, V> implements Map<K, V> {
         return minimum(node.left);
     }
 
-    private Node removeMin(Node node) {
-        // 递归到底的逻辑
-        if (node.left == null) {
-            // 保留右子树
-            Node rightNode = node.right;
-            // 删除最小值，此时的右子树成为新的节点
-            node.right = null;
-            size--;
-            return rightNode;
-        }
-        node.left = removeMin(node.left);
-        return node;
-    }
-
     // 删除Map中任意元素
     @Override
     public V remove(K key) {
@@ -249,59 +235,72 @@ public class AVLTree<K extends Comparable<K>, V> implements Map<K, V> {
         if (node == null) {
             return null;
         }
+        // 维护返回的Node,不再立即返回去，因为删除节点后可能破坏了平衡性
+        Node retNode;
         if (key.compareTo(node.key) > 0) {
             // 大于根节点，从右子树删除
             node.right = remove(node.right, key);
-            return node;
+            retNode = node;
         } else if (key.compareTo(node.key) < 0) {
             // 小于根节点，从左子树删除
             node.left = remove(node.left, key);
-            return node;
+            retNode = node;
         } else { // 等于根节点
             // 如果左子树为空，直接用右子树来替换
             if (node.left == null) {
                 Node rightNode = node.right;
                 node.right = null;
                 size--;
-                return rightNode;
+                retNode = rightNode;
             }
             // 如果右子树为空，直接用左子树替换
-            if (node.right == null) {
+            else if (node.right == null) {
                 Node leftNode = node.left;
                 node.left = null;
                 size--;
-                return leftNode;
+                retNode = leftNode;
+            } else {
+                // 待删除节点左右都不为空的情况
+                // 先找到右子树中后继节点，然后在右子树中删除该节点
+                Node successor = minimum(node.right);
+                // 这一步是递归的调用删除最小的值-remove方法中已经有了维护自平衡的方法
+                successor.right = remove(node.right, successor.key);
+                successor.left = node.left;
+                node.left = node.right = null;
+                retNode = successor;
             }
-            // 待删除节点左右都不为空的情况
-            // 先找到右子树中后继节点，然后在右子树中删除该节点
-            Node successor = minimum(node.right);
-            successor.right = removeMin(node.right);
-            successor.left = node.left;
-            node.left = node.right = null;
-            return successor;
         }
-    }
-
-    public static void main(String[] args) {
-        int opCount = 20000;
-        AVLTree<String, Object> bstMap = new AVLTree<String, Object>();
-        double time1 = testSet(bstMap, opCount);
-        System.out.println("bstMap :" + time1 + " s");
-
-        LinkedListMap<String, Object> linkedListMap = new LinkedListMap<String, Object>();
-        double time2 = testSet(linkedListMap, opCount);
-        System.out.println("linkedListMap :" + time2 + " s");
-    }
-
-    private static double testSet(Map<String, Object> map, int count) {
-        long startTime = System.nanoTime();
-        Random random = new Random();
-        for (int i = 0; i < count; i++) {
-            map.add("key" + random.nextInt(Integer.MAX_VALUE), "value" + random.nextInt(Integer.MAX_VALUE));
+        // ------维护平衡性,跟添加元素相一致------
+        if (retNode == null) {// 删除节点后二叉树为空，直接返回空
+            return null;
         }
-        long endTime = System.nanoTime();
-        // 以秒为单位
-        return (endTime - startTime) / 1000000000.0;
+        // 计算高度-更新height
+        retNode.height = 1 + Math.max(getHeight(retNode.left), getHeight(retNode.right));
+        // 计算平衡因子
+        int balanceFactor = getBalanceFactor(retNode);
+        if (Math.abs(balanceFactor) > 1) { // 平衡因子大于1,平衡性被破坏
+            // 向左倾斜-右旋转
+            if (balanceFactor > 1 && getBalanceFactor(retNode.left) >= 0) {
+                return rightRotate(retNode);// 形成新的根节点
+            }
+            // 向右倾斜-左旋转
+            if (balanceFactor < -1 && getBalanceFactor(retNode.right) <= 0) {
+                return leftRotate(retNode);// 形成新的根节点
+            }
+            // LR
+            if (balanceFactor > 1 && getBalanceFactor(retNode.left) < 0) {
+                // 转换为LL的情况
+                retNode.left = this.leftRotate(retNode.left);
+                return rightRotate(retNode);// 形成新的根节点
+            }
+            // RL
+            if (balanceFactor < -1 && getBalanceFactor(retNode.right) > 0) {
+                // 转换为RR的情况
+                retNode.right = this.rightRotate(retNode.right);
+                return leftRotate(retNode);// 形成新的根节点
+            }
+        }
+        return retNode;
     }
 }
 
